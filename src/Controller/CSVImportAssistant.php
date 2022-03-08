@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Repository\DataMappingRepository_v2;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
@@ -19,37 +20,57 @@ class CSVImportAssistant extends ImportAssistant
     {
         $serializer = new Serializer([new ObjectNormalizer()], [new CsvEncoder()]);
         $data = [
-            'Product1' => [
-                ['id' => 111, "name" => 'ps5_1'],
-                ['Price' => 501],
+            [
+                'id' => 111, "name" => 'ps5_1', 'Price' => 501,
             ],
-            'Product2' => [
-                ['id' => 112, "name" => 'ps5_2'],
-                ['Price' => 502],
+            [
+                'id' => 112, "name" => 'ps5_2', 'Price' => 502,
             ],
-            'Product3' => [
-                ['id' => 113, "name" => 'ps5_3'],
-                ['Price' => 503],
+             [
+                 'id' => 113, "name" => 'ps5_3', 'Price' => 503,
             ]
         ];
 // encoding contents in CSV format
         file_put_contents(
-            'data.csv',
+            'src/import/data.csv',
             $serializer->encode($data, 'csv')
         );
     }
 
-    function readFile(string $filePath): string
+    function readFile(string $filePath)
     {
         //$this->exportCSVToFile();
         $serializer = new Serializer([new ObjectNormalizer()], [new CsvEncoder()]);
         // TODO: Implement readFile() method.
 // decoding CSV contents
-        $data2 = $serializer->decode(file_get_contents('data.csv'), 'csv');
-
+        $dataRows = $serializer->decode(file_get_contents($filePath), 'csv');
         //return $filePath."from readFile CSVImportAssistant";
-        var_dump($data2);
-        return $data2;
+      //  var_dump($data2);
+
+        //todo: check duplicate
+        //$this->checkDeduplicate($dataRows);
+        return $dataRows;
+    }
+
+    public function getTableName($filePath)
+    {
+        $fileObject = new \SplFileObject($filePath);
+       return str_replace('.'.$fileObject->getExtension(),'', $fileObject->getBasename()) ;
+    }
+
+    public function checkDeduplicate($dataRow)
+    {
+    }
+
+    public function getTableHeader($dataRow)
+    {
+        $headers = [];
+        //dump($dataRow);
+        foreach ($dataRow as $col => $value){
+      //  dump($col);
+            $headers []= $col;
+        }
+        return $headers;
     }
 
 

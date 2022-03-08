@@ -17,6 +17,9 @@ abstract class ImportAssistant  extends AbstractController
 
     abstract function readFile(string $filePath);
 
+    abstract function getTableName(string $filePath);
+
+    abstract function getTableHeader($dataRow);
     /**
      * @return string
      */

@@ -13,8 +13,9 @@ class ImportController extends AbstractController
 
     #[Pure] public function initializeImporter($filePath): ImportAssistant
     {
+        $fileObject = new \SplFileObject($filePath);
         $dataImporter = null;
-        $csv_cond = str_contains($filePath, ImportAssistant::CSV_FILE_TYPE);
+        $csv_cond = str_contains($fileObject->getExtension(), ImportAssistant::CSV_FILE_TYPE);
 
         if ($csv_cond){
             $dataImporter = new CSVImportAssistant();
