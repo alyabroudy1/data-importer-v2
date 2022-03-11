@@ -2,11 +2,12 @@
 
 namespace App\Command;
 
+use App\Controller\ImportAssistant;
 use App\Controller\ImportController;
-use App\Repository\DataMappingRepository;
-use App\Repository\DataMappingRepository_v2;
+use App\Repository\DataMappingRepository_;
 use App\Services\CSVImportService;
 use Doctrine\ORM\EntityManagerInterface;
+use JetBrains\PhpStorm\Pure;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Helper\Table;
@@ -29,6 +30,11 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
     const ACCEPT_FILE_EXTENSION = ['csv'];
     private $projectDir;
 
+    public const ERROR_DATA_TYPE = 1;
+    public const ERROR_READ = 2;
+    public const ERROR_VERGLEICH = 3;
+    public const ERROR_PERSIST = 4;
+
     public function __construct(EntityManagerInterface $entityManager, $projectDir)
     {
         $this->entityManager = $entityManager;
@@ -40,8 +46,7 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
     {
         $this
             ->addArgument('arg1', InputArgument::OPTIONAL, 'Argument description')
-            ->addOption('option1', null, InputOption::VALUE_NONE, 'Option description')
-        ;
+            ->addOption('option1', null, InputOption::VALUE_NONE, 'Option description');
     }
 
 
@@ -65,50 +70,66 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
             '============================',
         ]);
         //$filePath ='src/import/Cars.csv';
-        $filePath ='src/import/MOCK_DATA.csv';
+        //$filePath ='src/import/MOCK_DATA.csv';
+        //$filePath ='src/import/Cars_fehlerhafte.csv';
+        $filePath = 'src/import/Cars_fehlerhafte_2.csv';
 
+        //initialize importController and initialize importAssistant identifying data-file-type
         $importController = new ImportController();
-        $dataImporter = $importController->initializeImporter($filePath);
+        $dataImporter = $importController->identifyAndInitializeDataTypeImporter($filePath);
 
-        if (null === $dataImporter){
-            $io->error('Die Dateiformat wurde von System nicht akzeptiert.');
+        $fileObject = new \SplFileObject($filePath);
+        //return data-type Error if data type not supported
+        if (null === $dataImporter) {
+            $io->error('Leider den "' . $fileObject->getExtension() . '" Datei-typ ist momentan nicht unterstützt');
             return Command::FAILURE;
         }
 
-        $dataRows = $dataImporter->readFile($filePath);
+        $io->info('Sie haben eine ' . $fileObject->getExtension() . ' Datei-Pfad gegeben');
 
+        //read data from the file
+        //TODO: identify corrupted data rows
+        $dataRows = $dataImporter->readAndValidateData($filePath);
 
-        $fileObject = new \SplFileObject($filePath);
-        $dataMappingRepository = new DataMappingRepository_v2(
+        $dataMappingRepository = new DataMappingRepository_(
             entityManager: $this->entityManager,
             table: str_replace('.' . $fileObject->getExtension(), '', trim($fileObject->getFilename())),
             io: $io
         );
 
-        $tableHeaders = $dataImporter->getTableHeader($dataRows[0]);
+        //identify data attribute
+        $tableHeaders = $dataImporter->identifyDataAttribute($dataRows[0]);
+
+        //if headers not in correct format return a readError
+        if (!$tableHeaders) {
+            $this->handleError(self::ERROR_READ, ["Fehler im Data-headers"], $io, $fileObject);
+            return Command::INVALID;
+        }
+
+        //get objet/Table name
         $tableName = $dataImporter->getTableName($filePath);
 
-        $io->info("[".count($dataRows)."]"." Datensatz mit folgende Attribute wurde gefunden:");
-        $io->text("Table:".$tableName);
+        $io->info("[" . count($dataRows) . "]" . " Datensatz mit folgende Attribute wurde gefunden:");
+        $io->text("Table:" . $tableName);
         $io->table($tableHeaders, []);
         //$io->table($tableHeaders, [$dataRows[0]]);
 
-        $answer = $io->ask('Möchten Sie weiter machen? [y/n]','y');
+        $answer = $io->ask('Möchten Sie weiter machen? [y/n]', 'y');
         if ($answer == 'n') {
             return Command::INVALID;
         }
 
-        if ($dataMappingRepository->isExistingTable($tableName)){
+        if ($dataMappingRepository->isTableExist($tableName)) {
             $existingAttribute = $dataMappingRepository->getExistingTableAttribute($tableName);
-            $io->info("Data Table [".$tableName."] mit folgende Attribute ist schon existiert:");
+            $io->info("Data Table [" . $tableName . "] mit folgende Attribute ist schon existiert:");
             $io->table($existingAttribute, []);
 
-            $compareResult = $dataMappingRepository->compareToDatabase($tableHeaders, $existingAttribute);
+            $compareResult = $dataMappingRepository->compareNewDataToDatabase($tableHeaders, $existingAttribute);
             $matchList = $compareResult['match'];
-            $noMatchList =$compareResult['noMatch'];
-            if (count($noMatchList) === 0){
+            $noMatchList = $compareResult['noMatch'];
+            if (count($noMatchList) === 0) {
                 $io->success("Data Attribute passt mit Datenbank Attribute.");
-            }else{
+            } else {
                 $io->warning("Folgende Data Attribute passt nicht mit Datenbank Attribute:");
                 $io->table($noMatchList, []);
                 $io->text('Passt nicht mit Datenbank Attribute:');
@@ -117,8 +138,8 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
                 return Command::INVALID;
             }
 
-        }else{
-            $answer = $io->ask('Data Table ['.$tableName.'] existiert nicht im Datenbank. Möchten Sie den Table ['.$tableName.'] erstellen? [y/n]','y');
+        } else {
+            $answer = $io->ask('Data Table [' . $tableName . '] existiert nicht im Datenbank. Möchten Sie den Table [' . $tableName . '] erstellen? [y/n]', 'y');
             if ($answer == 'n') {
                 return Command::INVALID;
             }
@@ -126,14 +147,50 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
             $dataMappingRepository->creatTable($tableHeaders);
         }
 
-        $answer = $io->ask('Möchten Sie jetzt importieren? [y/n]','n');
+        $answer = $io->ask('Möchten Sie jetzt importieren? [y/n]', 'n');
         if ($answer == 'n') {
             return Command::INVALID;
         }
         //insert data
-        $dataMappingRepository->insert($tableHeaders,$dataRows);
+        $dataMappingRepository->insertNewDataToDatabase($tableHeaders, $dataRows);
 
         $io->success('Importieren der Daten aus Datei wurde abgeschloßen.');
         return Command::SUCCESS;
     }
+
+    /**
+     * /F050/ Status ermitteln
+     * @return void
+     */
+    private function showStatus(SymfonyStyle $io, $message, $options)
+    {
+    }
+
+    /**
+     * /F060/ Fehler behandeln
+     */
+    private function handleError($errorType, $options, SymfonyStyle $io, \SplFileObject $fileObject)
+    {
+        /*ERROR_DATA_TYPE = 1;
+           public const ERROR_READ = 2;
+           public const ERROR_VERGLEICH = 3;
+           public const ERROR_PERSIST = 4;
+               */
+        $message = '';
+        switch ($errorType) {
+            case self::ERROR_DATA_TYPE:
+                $message = 'Data-type Fehler: [' . $fileObject->getExtension() . '] Datei-typ ist momentan nicht unterstützt';
+                break;
+            case self::ERROR_READ:
+                $message = 'Lese Fehler: [' . $options[0] . ']';
+                break;
+            case self::ERROR_VERGLEICH:
+                $message = 'Lese Fehler: [' . $options[0] . ']';
+                break;
+
+        }
+
+
+    }
+
 }

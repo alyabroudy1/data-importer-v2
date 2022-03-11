@@ -6,7 +6,7 @@ use Doctrine\DBAL\Exception;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
-class DataMappingRepository_v2
+class DataMappingRepository_
 {
     /**
      * @var \Doctrine\DBAL\Connection
@@ -37,7 +37,7 @@ class DataMappingRepository_v2
         }
     }
 
-    public function isExistingTable($tableName){
+    public function isTableExist($tableName){
         $tables = $this->getExistingTables();
         foreach ($tables as $table => $value){
             if (in_array($tableName, $value))
@@ -68,7 +68,10 @@ class DataMappingRepository_v2
         }
     }
 
-    public function compareToDatabase($newAttribute, $existingAttribute){
+    /**
+     * /F040/ Daten Spalten mit Datenbank vergleichen und Mappen
+     */
+    public function compareNewDataToDatabase($newAttribute, $existingAttribute){
         $noMatchList=[];
         $matchList=[];
         for ($i = 0; $i < count($existingAttribute); $i++){
@@ -125,8 +128,9 @@ class DataMappingRepository_v2
 
     /**
      * @throws \Doctrine\DBAL\Exception
+     * /F070/ Daten Importieren
      */
-    public function insert($headers, $dataRows){
+    public function insertNewDataToDatabase($headers, $dataRows){
         $duplicate = 0;
         $this->io->progressStart(count($dataRows));
 
@@ -239,10 +243,6 @@ class DataMappingRepository_v2
         }
     }
 
-    public function update(){
-
-    }
-
     /**
      * @return \Doctrine\DBAL\Query\QueryBuilder
      */
@@ -253,7 +253,7 @@ class DataMappingRepository_v2
     /**
      * @throws \Doctrine\DBAL\Exception
      */
-    public function getFields(): array
+    public function getExistingAttribute(): array
     {
         $stmt = $this->connection->executeQuery('describe ' . $this->currentTable);
 

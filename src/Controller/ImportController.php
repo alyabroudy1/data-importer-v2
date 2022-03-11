@@ -9,9 +9,10 @@ use Symfony\Component\Routing\Annotation\Route;
 
 class ImportController extends AbstractController
 {
-
-
-    #[Pure] public function initializeImporter($filePath): ImportAssistant
+    /**
+     * /F010/ Quell-Datei-Typ Identifizieren
+     */
+    #[Pure] public function identifyAndInitializeDataTypeImporter($filePath): ImportAssistant
     {
         $fileObject = new \SplFileObject($filePath);
         $dataImporter = null;

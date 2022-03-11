@@ -6,36 +6,33 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 
-abstract class ImportAssistant  extends AbstractController
+abstract class ImportAssistant extends AbstractController
 {
-    public const CSV_IMPORT_ASSISTANT = "CSVImportAssistant";
     public const CSV_FILE_TYPE = "csv";
 
-    /** @var $Name string name of the import-assistant */
-    protected string $Name;
-    protected string $FILE_TYPE;
+    protected string $fileType;
 
-    abstract function readFile(string $filePath);
+    /**
+     * /F020/ Daten Auslesen und Validieren
+     */
+    abstract function readAndValidateData(string $filePath);
+
+    /**
+     * /F030/ Daten Spalten Identifizieren
+     */
+    abstract function identifyDataAttribute($dataRow);
 
     abstract function getTableName(string $filePath);
 
-    abstract function getTableHeader($dataRow);
-    /**
-     * @return string
-     */
-    public function getName(): string
-    {
-        return $this->Name;
-    }
+
 
     /**
      * @return string
      */
-    public function getFILETYPE(): string
+    public function getFileType(): string
     {
-        return $this->FILE_TYPE;
+        return $this->fileType;
     }
-
 
 
 }
