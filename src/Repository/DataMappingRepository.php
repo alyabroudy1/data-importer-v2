@@ -30,20 +30,6 @@ class DataMappingRepository
         $this->entityManager = $entityManager;
     }
 
-    /**
-     * @throws \Doctrine\DBAL\Exception
-     */
-    public function getFieldsFromDatabase(): array
-    {
-        $stmt = $this->connection->executeQuery('describe ' . $this->currentTable);
-
-        $fields = [];
-        foreach ($stmt->fetchAllAssociative() as $row) {
-            $fields[] = $row['Field'];
-        }
-        return $fields;
-    }
-
     public function getExistingTables()
     {
         $sql = 'SHOW TABLES;';
@@ -56,45 +42,11 @@ class DataMappingRepository
         }
     }
 
-    /**
-     * TODO
-     * @return void
-     * @throws Exception
-     */
-    public function getExistingDatabases()
-    {
-        $sql = 'SHOW DATABASES;';
-        try {
-            //   dd( $this->connection->getSchemaManager()->createSchema()->$this->connection->getDatabasePlatform()->getListDatabasesSQL()));
-        } catch (Exception $e) {
-        }
-        $statement = $this->connection->getDatabase();
-        try {
-            $tableNames = $statement->executeQuery();
-            // dd($tableNames->fetchAllAssociative());
-            return $tableNames->fetchAllAssociative();
-        } catch (Exception $e) {
-            dump($e->getMessage());
-        }
-    }
-
     public function isTableExist($tableName)
     {
         $tables = $this->getExistingTables();
         foreach ($tables as $table => $value) {
             if (in_array($tableName, $value)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public function isExistDatabase($databaseName)
-    {
-        $databases = $this->getExistingDatabases();
-        //dd($databases);
-        foreach ($databases as $db => $value) {
-            if (in_array($databaseName, $value)) {
                 return true;
             }
         }
@@ -124,7 +76,6 @@ class DataMappingRepository
             dump($e->getMessage());
         }
     }
-
 
     /**
      * @return void
@@ -165,8 +116,6 @@ class DataMappingRepository
         }
     }
 
-
-
     /**
      * @throws \Doctrine\DBAL\Exception
      * /F070/ Daten Importieren
@@ -196,34 +145,29 @@ class DataMappingRepository
         }
     }
 
+    /**
+     * @return \Doctrine\DBAL\Query\QueryBuilder
+     */
+    protected function createQuery()
+    {
+        return $this->connection->createQueryBuilder();
+    }
 
+    /**
+     * @throws \Doctrine\DBAL\Exception
+     */
+    public function getExistingAttribute(): array
+    {
+        $stmt = $this->connection->executeQuery('describe ' . $this->currentTable);
 
+        $fields = [];
+        foreach ($stmt->fetchAllAssociative() as $row) {
+            $fields[] = $row['Field'];
+        }
+        return $fields;
+    }
 
-    /*
-          $query = $this->createQuery();
-         dump( $query
-              ->insert($this->currentTable)
-              ->values(" ' ".implode("', '" , $dataRows) . "' ")
-              ->getSQL()  );
-
-
-
-  /*        foreach ($dataRows as $row){
-              //todo find if data already exist
-              dump(implode(', ', $row));
-              $sql = 'INSERT INTO '.$this->currentTable . '('.implode(', ', $headers) . ')'.
-                  'VALUES (' .implode(', \'', $row). ');';
-              $statement = $this->connection->prepare($sql);
-              try {
-                  $queryResult = $statement->executeQuery();
-              } catch (Exception $e) {
-                  dump($e->getMessage());
-              }
-                 }
-          */
-    // }
-
-    public function castType($value)
+    private function castType($value)
     {
         $value = str_replace('"', "", $value);
         if (is_numeric($value)) {
@@ -232,7 +176,7 @@ class DataMappingRepository
         return "'" . $value . "'";
     }
 
-    public function addQuote($value, $isData = false)
+    private function addQuote($value, $isData = false)
     {
         $split = "`";
         if ($isData) {
@@ -241,7 +185,7 @@ class DataMappingRepository
         return $split . $value . $split;
     }
 
-    public function rowsToString($rows, $isData = false)
+    private function rowsToString($rows, $isData = false)
     {
         $result = "";
         foreach ($rows as $row => $value) {
@@ -258,7 +202,7 @@ class DataMappingRepository
         return $result;
     }
 
-    public function isExistingData($dataRow, $numberOfAttribute, $headers)
+    private function isExistingData($dataRow, $numberOfAttribute, $headers)
     {
         $sql = 'SELECT ' . $this->rowsToString($headers) . " FROM " . $this->currentTable;
 
@@ -280,21 +224,6 @@ class DataMappingRepository
         }
     }
 
-    public function createDatabase(mixed $databaseName)
-    {
-        try {
-            if (!empty($databaseName)) {
-                $sqlStatement = "CREATE DATABASE IF NOT EXISTS " . $databaseName . ";";
-            }
-            $stmt = $this->connection->prepare($sqlStatement);
-            $stmt->executeQuery();
-            //$this->io->success('Table ['.$this->currentTable.'] mit folgende Attribute wurde erstellt.');
-            //$this->io->table($rows, []);
-        } catch (\Doctrine\DBAL\Exception $exception) {
-            throw new \Exception($exception->getMessage(), $exception->getCode());
-        }
-    }
-
     public function addNewFieldToDatabase($newFieldName)
     {
         $sql = 'ALTER TABLE ' . $this->currentTable . ' ADD ' . $newFieldName . ' TEXT NOT NULL;';
@@ -307,27 +236,5 @@ class DataMappingRepository
             dump($e->getMessage());
             dump($sql);
         }
-    }
-
-    /**
-     * @return \Doctrine\DBAL\Query\QueryBuilder
-     */
-    protected function createQuery()
-    {
-        return $this->connection->createQueryBuilder();
-    }
-
-    /**
-     * @throws \Doctrine\DBAL\Exception
-     */
-    public function getExistingAttribute(): array
-    {
-        $stmt = $this->connection->executeQuery('describe ' . $this->currentTable);
-
-        $fields = [];
-        foreach ($stmt->fetchAllAssociative() as $row) {
-            $fields[] = $row['Field'];
-        }
-        return $fields;
     }
 }

@@ -6,6 +6,7 @@ use App\Controller\ImportAssistant;
 use App\Controller\ImportController;
 use App\Repository\DataMappingRepository_;
 use App\Services\CSVImportService;
+use App\Services\ImportService;
 use Doctrine\ORM\EntityManagerInterface;
 use JetBrains\PhpStorm\Pure;
 use mysql_xdevapi\Result;
@@ -27,28 +28,24 @@ use function PHPUnit\Framework\returnArgument;
 )]
 class DataImportCommand extends \Symfony\Component\Console\Command\Command
 {
-    /**
-     * @var array
-     */
-    const ACCEPT_FILE_EXTENSION = ['csv'];
+
     public const ERROR_DATA_TYPE = 1;
     public const ERROR_READ = 2;
     public const ERROR_VERGLEICH = 3;
     public const ERROR_PERSIST = 4;
-    private $projectDir;
+
     /**
      * @var SymfonyStyle
      */
     private $io;
-    private $importService;
+    private ImportService $importService;
     private $repo;
     private $fileObject;
 
 
-    public function __construct(EntityManagerInterface $entityManager, $projectDir)
+    public function __construct(EntityManagerInterface $entityManager)
     {
         $this->entityManager = $entityManager;
-        $this->projectDir = $projectDir;
         parent::__construct();
     }
 
@@ -57,31 +54,6 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
         $this
             ->addArgument('filePath', InputArgument::REQUIRED, 'Dateipfad')
             ->addOption('option1', null, InputOption::VALUE_NONE, 'Option description');
-    }
-    function validateDate($data, $format = 'Y-m-d H:i:s')
-    {
-
-dd(intval($data));
-        $floatCond =  is_numeric($data) && (str_contains($data, '.') || str_contains($data, ','));
-        $dateCond =  strlen(trim($data)) > 4 && strtotime($data);
-        $intCond =  is_numeric($data);
-
-        //dd($floatCond, $dateCond, $intCond);
-       if ($floatCond){
-            return'float';
-        }elseif ($intCond){
-            return'int';
-        }else{
-            return 'TEXT';
-        }
-
-     /*   return match ($data) {
-            $dateCond => 'Date',
-            $floatCond => 'float',
-            $intCond => 'int',
-            default => 'TEXT'
-        };
-     */
     }
 
     /**
@@ -158,7 +130,7 @@ dd(intval($data));
             $databaseHeaders = $databaseValidationResult['databaseHeaders'];
             $databaseHeadersWithAttribute = $databaseValidationResult['databaseHeadersWithAttribute'];
 
-            $processWithExistingTableResult = $this->processWithExistingTable($dataArray, $databaseHeaders);
+            $processWithExistingTableResult = $this->proceedWithExistingTable($dataArray, $databaseHeaders);
             $newAttributeInFile = $processWithExistingTableResult['newAttributeInFile'];
             $dataArray = $processWithExistingTableResult['dataArray'];
         } else {
@@ -315,7 +287,7 @@ dd(intval($data));
      * @param $databaseHeaders
      * @return array
      */
-    protected function processWithExistingTable($dataArray, $databaseHeaders): array
+    protected function proceedWithExistingTable($dataArray, $databaseHeaders): array
     {
         $compareResult = $this->importService->compareNewDataToDatabase($dataArray['headers'], $databaseHeaders);
         $matchList = $compareResult['match'];
