@@ -4,22 +4,16 @@ namespace App\Command;
 
 use App\Controller\ImportAssistant;
 use App\Controller\ImportController;
-use App\Repository\DataMappingRepository_;
 use App\Services\CSVImportService;
 use App\Services\ImportService;
 use Doctrine\ORM\EntityManagerInterface;
-use JetBrains\PhpStorm\Pure;
-use mysql_xdevapi\Result;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
-use Symfony\Component\Console\Helper\Table;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
-
-use function PHPUnit\Framework\returnArgument;
 
 #[AsCommand(
     name: 'data:import',
@@ -35,11 +29,20 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
     public const ERROR_PERSIST = 4;
 
     /**
-     * @var SymfonyStyle
+     * @var SymfonyStyle $io to manage output style
      */
     private $io;
+    /**
+     * @var ImportService $importService service to import the data
+     */
     private ImportService $importService;
+    /**
+     *  $repo MappingRepository Class
+     */
     private $repo;
+    /**
+     * @var $fileObject \SplFileObject that represent the file to be imported
+     */
     private $fileObject;
 
 
@@ -49,6 +52,10 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
         parent::__construct();
     }
 
+    /**
+     * Configure the command
+     * @return void
+     */
     protected function configure(): void
     {
         $this
@@ -57,18 +64,15 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
     }
 
     /**
-     * @param InputInterface $input
-     * @param OutputInterface $output
-     * @return int
+     * @param InputInterface $input manage input
+     * @param OutputInterface $output manage output
+     * @return int Command state
      * @throws \Exception
      */
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $this->io = new SymfonyStyle($input, $output);
         $filePath = $input->getArgument('filePath');
-
-      // dd( $this->validateDate('-20191109' ) );
-        //dd('done');
 
         //validate given filepath
         if (!$filePath) {
@@ -97,14 +101,13 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
                 /* @TODO Importer erweitern */
                 break;
             default:
-                //$io->error('Die Dateiformat ['.$this->fileObject->getExtension().'] wurde von System nicht akzeptiert.');
-                //return Command::FAILURE;
                 return $this->handleError(self::ERROR_DATA_TYPE, [$this->fileObject->getExtension()]);
         }
         return Command::SUCCESS;
     }
 
     /**
+     * start the process of importing the data
      * @return int Command status
      */
     public function importData()
@@ -153,25 +156,20 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
             $databaseHeaders = $databaseValidationResult['databaseHeaders'];
             $this->io->success('Table [' . $dataArray['tableName'] . '] mit folgende Attribute wurde erstellt.');
             $this->printTable($dataArray['headers'], ['id', 'name']);
-            //$this->io->table($dataArray['headers'], []);
         }
-
-        //TODO: check if database exist
-        /* if (!$repo->isExistDatabase($databaseName)) {
-             $answer = $io->ask('Datenbank ['.$databaseName.']existiert nicht. Möchten Sie den Datenbank ['.$databaseName.'] erstellen? [y/n]', 'y');
-             if ($answer == 'n') {
-                 return Command::INVALID;
-             }
-             $repo->createDatabase($databaseName);
-             $io->success('Datenbank ['.$databaseName.'] wurde erstellt.');
-         }*/
-
         $this->persistDataToDatabase($dataArray, $databaseHeaders, $databaseHeadersWithAttribute, $newAttributeInFile);
 
         $this->io->success('Importieren der Daten aus Datei wurde abgeschloßen.');
         return Command::SUCCESS;
     }
 
+    /**
+     * @param $dataArray array contains file data-headers and data-rows
+     * @param $databaseHeaders array database-headers
+     * @param $databaseHeadersWithAttribute array database-headers with full information about attribute like type
+     * @param $newAttributeInFile array new attribute to be added to file -data-headers if any.
+     * @return int|void Command state in case of errors or warning
+     */
     private function persistDataToDatabase(
         $dataArray,
         $databaseHeaders,
@@ -190,7 +188,6 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
 
             $dataRows = $dataAdjustmentResult['dataRows'];
             $corruptedData = $dataAdjustmentResult['corruptedData'];
-            // $this->importService->adjustDataHeaderKeys($databaseHeaders, $newAttributeInFile);
             //$csvImportService->getDataMappingRepository()->truncate();
             $this->io->progressStart(count($dataRows));
             $duplicate = 0;
@@ -210,8 +207,8 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
                 $this->printTable($corruptedData, ['#', 'Fehler', 'Zeile']);
             }
             $this->io->success(
-                "[" . $importedDataCount . "] imported Datensätze" . PHP_EOL.
-                "[" . $duplicate . "] Doppelte Datensätze" . PHP_EOL.
+                "[" . $importedDataCount . "] imported Datensätze" . PHP_EOL .
+                "[" . $duplicate . "] Doppelte Datensätze" . PHP_EOL .
                 "[" . count($corruptedData) . "] Fehlerhafte Datensätze"
             );
         } elseif ($answer == 'n') {
@@ -225,6 +222,9 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
 
     /**
      * /F060/ Fehler behandeln
+     * @param $errorType string type of error
+     * @param $options array if any options to add explaining the error
+     * @return int|void Command state in case of errors or warning
      */
     private function handleError($errorType, $options = [""])
     {
@@ -254,16 +254,17 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
     }
 
     /**
-     * @param $errors
-     * @param $headers
-     * @return array
+     * handle read errors of data-headers
+     * @param $errors array headers errors
+     * @param $headers array data-headers
+     * @return array corrected data headers and errors that couldn't be corrected if any.
      */
     private function handleHeaderReadErrors($errors, $headers)
     {
         $errorsCounter = 0;
         foreach ($errors as $err) {
-            $duplicate =', duplicate:' . $this->importService->arrayToString($err['duplicateRows']);
-            if (!$err['duplicateRows']){
+            $duplicate = ', duplicate:' . $this->importService->arrayToString($err['duplicateRows']);
+            if (!$err['duplicateRows']) {
                 $duplicate = '';
             }
             $row = '[' . $err['error'] . '] in Zeile:' . $this->importService->arrayToString($err['row']) .
@@ -278,6 +279,12 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
         return ['headers' => $headers, 'errors' => $errors];
     }
 
+    /**
+     * handle duplication error of data-headers
+     * @param $error array headers error
+     * @param $headers array data-headers
+     * @return array corrected data headers.
+     */
     private function handleHeaderDuplicationError($error, $headers)
     {
         $solutionList = $this->suggestSolutions($error);
@@ -293,9 +300,10 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
     }
 
     /**
-     * @param $dataArray
-     * @param $databaseHeaders
-     * @return array
+     * proceed data importing assuming the database and tables already exist
+     * @param $dataArray array data-headers and data-rows
+     * @param $databaseHeaders array database-headers
+     * @return array data-headers and data-rows and if there's new attribute to be added to data-headers in orders to match database
      */
     protected function proceedWithExistingTable($dataArray, $databaseHeaders): array
     {
@@ -309,14 +317,13 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
             $compareFixResult = $this->fixHeadersCompareError($dataArray['headers'], $noMatchList, $databaseHeaders);
             $dataArray['headers'] = $compareFixResult ['dataHeaders'];
             $newAttributeInFile = $compareFixResult['newAttribute'];
-            //$dataArray= $this->fixCompareError($dataArray, $noMatchList, $databaseHeaders);
         }
         return ['dataArray' => $dataArray, 'newAttributeInFile' => $newAttributeInFile];
     }
 
     /**
-     * @param $err
-     * @return array
+     * @param $err array error of data-headers
+     * @return array suggested solutionsList to correct the error
      */
     private function suggestSolutions($err)
     {
@@ -377,6 +384,11 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
         return $solutionsList;
     }
 
+    /**
+     * validate data-headers
+     * @param array $dataArray data-headers
+     * @return array|int Command state code if error or warning, or the validated headers
+     */
     private function validateDataHeaders(array $dataArray)
     {
         $headerErrors = $this->importService->isValidHeader($dataArray['headers']);
@@ -399,6 +411,11 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
         return $dataArray;
     }
 
+    /**
+     * validate database-headers
+     * @param mixed $tableName the name of database-table
+     * @return array  'isExistingTable', 'databaseHeaders' and 'databaseHeadersWithAttribute'
+     */
     private function validateDatabaseHeaders(mixed $tableName)
     {
         $isExistingTable = $this->repo->isTableExist($tableName);
@@ -417,6 +434,13 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
         ];
     }
 
+    /**
+     * fix comparison result errors
+     * @param $dataHeaders array data-headers
+     * @param $noMatchList array attributes that didn't match database-attributes
+     * @param $databaseHeaders array database-headers
+     * @return array 'dataHeaders', 'databaseHeaders' and 'newAttribute' if any.
+     */
     private function fixHeadersCompareError($dataHeaders, $noMatchList, $databaseHeaders)
     {
         $this->io->warning("Folgende Data Attribute passt nicht mit Datenbank Attribute:");
@@ -471,10 +495,16 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
         ];
     }
 
-    private function printTable($databaseHeaders, $cols = [])
+    /**
+     * prints a table in the Console
+     * @param $headers array table headers
+     * @param $cols array data to be filled in table columns
+     * @return void
+     */
+    private function printTable($headers, $cols = [])
     {
         $newArray = [];
-        foreach ($databaseHeaders as $arrayKey => $array) {
+        foreach ($headers as $arrayKey => $array) {
             if (is_array($array)) {
                 $colCounter = 0;
                 $rowCol = [$arrayKey];

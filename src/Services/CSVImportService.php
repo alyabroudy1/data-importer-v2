@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Repository\DataMappingRepository;
-use Doctrine\DBAL\Exception;
 use Doctrine\ORM\EntityManagerInterface;
 use SplFileObject;
 
@@ -56,13 +55,13 @@ class CSVImportService extends ImportService
         foreach ($this->fileObject as $i => $row) {
             if ($i == 0) {
                 $headers = $row;
-            }elseif ($i == 1){
+            } elseif ($i == 1) {
                 $firstRowData = $row;
                 break;
             }
         }
         $headersType = parent::detectDataType($headers, $firstRowData);
-       // dd('headersWithType');
+        // dd('headersWithType');
         return [
             'tableName' => $tableName,
             'headers' => $headers,
@@ -70,6 +69,11 @@ class CSVImportService extends ImportService
         ];
     }
 
+    /**
+     * @param $headers string[] data-headers
+     * @param $newAttribute string[] new attributes to be added to data-headers in order to match database headers. if any.
+     * @return string[][] data-rows from the file
+     */
     public function readData($headers, $newAttribute)
     {
         $dataRows = [];

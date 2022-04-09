@@ -8,18 +8,33 @@ abstract class ImportService
 {
 
     /**
-     * @var DataMappingRepository $dataMappingRepository
+     * @var DataMappingRepository $dataMappingRepository for mapping data to database
      */
     protected $dataMappingRepository;
 
+    /**
+     * get tableName, tableHeaders, und dataRows from csv file
+     * @return array String[][] containing tableName, tableHeaders, und dataRows
+     */
     abstract public function readDataHeaders();
 
+    /**
+     * @param $headers string[] data-headers
+     * @param $newAttribute string[] new attributes to be added to data-headers in order to match database headers. if any.
+     * @return string[][] data-rows from the file
+     */
     abstract public function readData($headers, $newAttribute);
 
+    /**
+     * @return mixed Data-mapping class
+     */
     abstract public function getDataMappingRepository();
 
     /**
      * /F040/ Daten Spalten mit Datenbank vergleichen und Mappen
+     * @param $newAttribute string[] new attributes to be added to data-headers in order to match database headers. if any.
+     * @param $databaseHeaders string[] database-headers
+     * @return array[] compare result with 'match' and 'noMatch' attribute list from headers
      */
     public function compareNewDataToDatabase($newAttribute, $databaseHeaders)
     {
@@ -35,26 +50,25 @@ abstract class ImportService
             $anzahlLoop = $anzahlNewHeaders;
         }
 
-        //dump(count($newAttribute), count($databaseHeaders), $anzahlLoop);
         for ($i = 0; $i < $counter; $i++) {
             if (empty($databaseHeaders[$i])) {
-                //dump( '[leer]', $newAttribute[$i]);
-                //$noMatchList [] = array('[leer]', $i => $newAttribute[$i]);
                 $noMatchList [] = array('[leer]', $newAttribute[$i]);
             } elseif (empty($newAttribute[$i])) {
-                //dump( $databaseHeaders[$i], '[leer]');
-                //$noMatchList [] = [$i => $databaseHeaders[$i], '[leer]' ];
                 $noMatchList [] = [$databaseHeaders[$i], '[leer]'];
             } elseif ($databaseHeaders[$i] === $newAttribute[$i]) {
                 $matchList [] = $databaseHeaders[$i];
             } else {
                 $noMatchList [] = [$databaseHeaders[$i], $newAttribute[$i]];
-                //$noMatchList [] = [$i => $databaseHeaders[$i], $newAttribute[$i] ];
             }
         }
         return ['match' => $matchList, 'noMatch' => $noMatchList];
     }
 
+    /**
+     * @param $newFieldName string attribute name
+     * @param $databaseHeaders array database-headers
+     * @return array new database-headers
+     */
     public function addNewFieldToDatabase($newFieldName, $databaseHeaders)
     {
         $this->dataMappingRepository->addNewFieldToDatabase($newFieldName);
@@ -62,6 +76,10 @@ abstract class ImportService
         return $databaseHeaders;
     }
 
+    /**
+     * @param $headers array data-headers
+     * @return array validation result
+     */
     public function isValidHeader($headers)
     {
         /*
@@ -74,13 +92,11 @@ abstract class ImportService
             $error = "Attribute Name Error";
             $rows = [];
             foreach ($headers as $attribute => $value) {
-                //$value = $value['Field'];
                 $strangeNameCond = $value === '' || is_numeric($value) || strlen($value) < 2;
                 $strangeNameCond2 = strlen($value) > 75 || preg_match('/[\'^£$%&*()}{@#~?><>\/,.:|=+¬]/', $value);
                 if ($strangeNameCond || $strangeNameCond2) {
                     if (strlen($value) > 30) {
                         $value = substr($value, 0, 20);
-                        //dump($value);
                     }
                     $rows[] = [$attribute => $value];
                 }
@@ -110,10 +126,13 @@ abstract class ImportService
             }
             unset($headersCopy[$att]);
         }
-        // dd($errorList);
         return $errorList;
     }
 
+    /**
+     * @param array $rows arrays to convert its values to string
+     * @return string converted array
+     */
     public function arrayToStringValue(mixed $rows)
     {
         $result = '';
@@ -138,6 +157,11 @@ abstract class ImportService
         return $result;
     }
 
+    /**
+     * @param array $rows arrays to convert its keys and values to string
+     * @param int $startNumber starting reference number with a 0 or 1
+     * @return string converted array
+     */
     public function arrayToString(mixed $rows, $startNumber = 0)
     {
         $result = '';
@@ -162,6 +186,12 @@ abstract class ImportService
         return $result;
     }
 
+    /**
+     * @param $dataRows array Data to be adjusted to match data-headers
+     * @param $headers array data-headers
+     * @param $newAttribute array in any new attributes to be added to data-row in order to match data-headers
+     * @return array adjustment data-result adjusted data and corrupted data
+     */
     public function adjustData($dataRows, $headers, $newAttribute)
     {
         /*
@@ -174,8 +204,6 @@ abstract class ImportService
             //add new attribute
             foreach ($newAttribute as $att) {
                 $copyDataRows [$i] [] = '';
-                //$copyDataRows [$i] [$att] = '';
-                // dd($dataRows [$i]);
             }
         }
 
@@ -184,9 +212,6 @@ abstract class ImportService
         $corruptedDataCounter = 1;
         foreach ($copyDataRows as $i => $row) {
             $rowNumber = $i + 1;
-
-
-            //$matchCond = (count($dataRows [$i]) + count($newAttribute)) === count($headers);
             $matchCond = (count($row)) === count($headers);
             if (!$matchCond) {
                 if (count($row) < 2) {
@@ -201,14 +226,6 @@ abstract class ImportService
             } else {
                 $NullAttributeListe = [];
                 foreach ($row as $col => $value) {
-                    /*  if ($col === count($row) - 1) {
-                          foreach ($newAttribute as $att) {
-                              $dataRows [$i] [$att] = '';
-                          }
-                      }
-                    */
-                    //dump($headers[$col]);
-                    //dump($i, $headers[$col]['Field'],$headers[$col]['Null']);
                     $NullAttributeCond = $headers[$col]['Null'] === 'NO' && $value === '';
                     if ($NullAttributeCond) {
                         $NullAttributeListe [$col] = $headers[$col]['Field'];
@@ -230,68 +247,28 @@ abstract class ImportService
         return ['dataRows' => $correctData, 'corruptedData' => $corruptedData];
     }
 
-    public function adjustDataHeaderKeys($databaseHeaders, $newAttributeInFile)
-    {
-        /*
-         * 1. row size doesnt match headers size
-         * 2.  mandatory field is null
-         */
-        //$headersSize = count($databaseHeaders);
-
-        $headersSize = count($databaseHeaders);
-        $data = $this->readData($databaseHeaders, $newAttributeInFile);
-
-        /*
-            if ($newAttributeInFile){
-                $data =$this->addNewAttributeToDataRows($newAttributeInFile, $data);
-            }
-        */
-
-        foreach ($data as $row => $value) {
-            if (count($value) !== $headersSize) {
-                dump('size doesnt match', $headersSize, count($value));
-            } else {
-                dump('match');
-            }
-        }
-    }
-
     /**
-     * @param $newAttribute
-     * @param $dataRow
-     * addes empty value to data-row in order to match database table-size
+     * @param array $headers data-headers
+     * @param array $firstRowData example of data-values
+     * @return array data-headers with its data-type
      */
-    private function addNewAttributeToDataRows($newAttribute, $dataRow)
-    {
-        $newDataRows = $dataRow;
-        foreach ($dataRow as $row => $value) {
-            foreach ($newAttribute as $att => $value2) {
-                $newDataRows[$row][$value2] = '';
-            }
-            //  array_push($dataRow[$row], [$newAttributeName => '']);
-        }
-        return $newDataRows;
-    }
-
     public function detectDataType(array $headers, array $firstRowData)
     {
         $headersCopy = [];
-        foreach ($firstRowData as $row => $data){
-            if (array_key_exists($row, $headers)){
-                $headersCopy[]= $this->detectType($data);
-                /*   $headersCopy[]= [
-                       'Field' => $headers[$row],
-                       'Type' => $this->detectType($data)
-                   ];
-                */
-                //dump($data, $this->detectType($data));
+        foreach ($firstRowData as $row => $data) {
+            if (array_key_exists($row, $headers)) {
+                $headersCopy[] = $this->detectType($data);
             }
         }
         return $headersCopy;
     }
 
-    private function detectType($data){
-        //TODO: detect type
+    /**
+     * @param $data string data-value to detect its data-type
+     * @return string data-type
+     */
+    private function detectType($data)
+    {
         /*   $floatCond =  is_numeric($data) && (str_contains($data, '.') || str_contains($data, ','));
           // $dateCond =  strlen(trim($data)) > 4 && strtotime($data);
            $intCond =  is_numeric($data);
