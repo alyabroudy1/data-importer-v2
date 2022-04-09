@@ -10,18 +10,19 @@ use SplFileObject;
 class CSVImportService extends ImportService
 {
     /**
-     * @var string
+     * @var string char the separate the values in csv files
      */
     public const IMPORT_FILE_DELIMITER = ',';
 
     /**
-     * @var SplFileObject
+     * @var SplFileObject Object which represent the file to be imported
      */
     protected SplFileObject $fileObject;
 
     /**
-     * @param SplFileObject $fileObject
-     * @param EntityManagerInterface $entityManager
+     * constructor
+     * @param SplFileObject $fileObject the file to be imported
+     * @param EntityManagerInterface $entityManager for database management
      */
     public function __construct(SplFileObject $fileObject, EntityManagerInterface $entityManager)
     {
@@ -36,8 +37,7 @@ class CSVImportService extends ImportService
 
     /**
      * get tableName, tableHeaders, und dataRows from csv file
-     * @return array
-     * @throws Exception
+     * @return array String[][] containing tableName, tableHeaders, und dataRows
      */
     public function readDataHeaders()
     {

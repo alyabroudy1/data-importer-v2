@@ -115,6 +115,11 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
         $dataArray = $this->importService->readDataHeaders();
         $headersType = $dataArray['headersType'];
 
+        if (!$dataArray['headers']) {
+            $this->handleError(self::ERROR_READ, ["fehlerhafte Daten Header Fehler"]);
+            return Command::INVALID;
+        }
+
         $databaseName = $_ENV["DB_NAME"];
         if (!$databaseName) {
             $this->handleError(self::ERROR_READ, ["Fehler im Datenbank Adresse"]);
@@ -205,9 +210,9 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
                 $this->printTable($corruptedData, ['#', 'Fehler', 'Zeile']);
             }
             $this->io->success(
-                "[" . $importedDataCount . "] imported Datensätze," .
-                "[" . $duplicate . "] Doppelte Datensätze." .
-                "[" . count($corruptedData) . "] Fehlerhafte Datensätze."
+                "[" . $importedDataCount . "] imported Datensätze" . PHP_EOL.
+                "[" . $duplicate . "] Doppelte Datensätze" . PHP_EOL.
+                "[" . count($corruptedData) . "] Fehlerhafte Datensätze"
             );
         } elseif ($answer == 'n') {
             $this->io->info('Import Process wurde abgebrochen');
@@ -257,8 +262,13 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
     {
         $errorsCounter = 0;
         foreach ($errors as $err) {
+            $duplicate =', duplicate:' . $this->importService->arrayToString($err['duplicateRows']);
+            if (!$err['duplicateRows']){
+                $duplicate = '';
+            }
             $row = '[' . $err['error'] . '] in Zeile:' . $this->importService->arrayToString($err['row']) .
-                ', duplicate:' . $this->importService->arrayToString($err['duplicateRows']);
+                $duplicate;
+
             $this->io->error($row);
             //correct error
             $headers = $this->handleHeaderDuplicationError($err, $headers);
