@@ -102,9 +102,8 @@ class DataMappingRepository
 
     /**
      * creates a table in the database
-     * @param $tableName string table name
      * @param $rows array attributes of the table
-     * @throws \Doctrine\DBAL\Exception
+     * @param $dataType
      */
     public function creatTable($rows, $dataType)
     {
@@ -130,12 +129,10 @@ class DataMappingRepository
      * @param $headers array data-headers
      * @param $dataRow array data-rows to be inserted
      * @return bool|void true if done without error
-     * @throws Exception
      */
     public function insertNewDataToDatabase($headers, $dataRow)
     {
         $sql = "";
-        $numberOfAttributeToCompare = intval(count($headers) / 2);
         if ($this->isExistingData($dataRow, 2, $headers)) {
             return false;
         }

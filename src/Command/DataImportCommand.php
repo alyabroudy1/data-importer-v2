@@ -7,6 +7,7 @@ use App\Controller\ImportController;
 use App\Services\CSVImportService;
 use App\Services\ImportService;
 use Doctrine\ORM\EntityManagerInterface;
+use phpDocumentor\Reflection\Types\This;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -14,6 +15,8 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+
+use function PHPUnit\Framework\at;
 
 #[AsCommand(
     name: 'data:import',
@@ -74,7 +77,7 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
         $this->io = new SymfonyStyle($input, $output);
         $filePath = $input->getArgument('filePath');
 
-        //validate given filepath
+        //1. validate given filepath
         if (!$filePath) {
             return $this->handleError(
                 self::ERROR_READ,
@@ -91,6 +94,7 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
 
         $this->fileObject = new \SplFileObject($filePath);
 
+        //2. initialize supported Importservice
         switch ($this->fileObject->getExtension()) {
             case 'csv':
                 $this->importService = new CSVImportService($this->fileObject, $this->entityManager);
@@ -98,7 +102,6 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
             //break;
             case 'xls':
             case 'xlsx':
-                /* @TODO Importer erweitern */
                 break;
             default:
                 return $this->handleError(self::ERROR_DATA_TYPE, [$this->fileObject->getExtension()]);
@@ -112,9 +115,11 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
      */
     public function importData()
     {
+
         $this->io->info('Sie haben eine [' . $this->fileObject->getExtension() . '] Datei-Pfad gegeben');
         $this->repo = $this->importService->getDataMappingRepository();
 
+        //3. read data headers from the file
         $dataArray = $this->importService->readDataHeaders();
         $headersType = $dataArray['headersType'];
 
@@ -128,7 +133,10 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
             $this->handleError(self::ERROR_READ, ["Fehler im Datenbank Adresse"]);
             return Command::INVALID;
         }
+
+        //4. get and validate database headers
         $databaseValidationResult = $this->validateDatabaseHeaders($dataArray['tableName']);
+        //5. get and validate file data headers
         $dataArray = $this->validateDataHeaders($dataArray);
 
         $databaseHeadersWithAttribute = [];
@@ -137,6 +145,9 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
         if ($databaseValidationResult['isExistingTable']) {
             $databaseHeaders = $databaseValidationResult['databaseHeaders'];
             $databaseHeadersWithAttribute = $databaseValidationResult['databaseHeadersWithAttribute'];
+
+            $this->io->info('Data Table [' . $dataArray['tableName'] . ']' . '] mit folgende Attribute ist schon existiert:');
+            $this->printTable($databaseHeadersWithAttribute, ['#', 'Field', 'Type']);
 
             $processWithExistingTableResult = $this->proceedWithExistingTable($dataArray, $databaseHeaders);
             $newAttributeInFile = $processWithExistingTableResult['newAttributeInFile'];
@@ -151,11 +162,19 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
             }
             //create table if not exist
             $this->repo->creatTable($dataArray['headers'], $headersType);
+            $this->io->success('Table [' . $dataArray['tableName'] . '] mit folgende Attribute wurde erstellt.');
+            $this->printTable($dataArray['headers'], ['id', 'name']);
+           // dd($databaseValidationResult);
             $databaseValidationResult = $this->validateDatabaseHeaders($dataArray['tableName']);
+            $databaseHeadersWithAttribute = $databaseValidationResult['databaseHeadersWithAttribute'];
+            $databaseHeaders = $databaseValidationResult['databaseHeaders'];
+           // dd('creating table');
+           /* $databaseValidationResult = $this->validateDatabaseHeaders($dataArray['tableName']);
             $databaseHeadersWithAttribute = $databaseValidationResult['databaseHeadersWithAttribute'];
             $databaseHeaders = $databaseValidationResult['databaseHeaders'];
             $this->io->success('Table [' . $dataArray['tableName'] . '] mit folgende Attribute wurde erstellt.');
             $this->printTable($dataArray['headers'], ['id', 'name']);
+           */
         }
         $this->persistDataToDatabase($dataArray, $databaseHeaders, $databaseHeadersWithAttribute, $newAttributeInFile);
 
@@ -185,10 +204,10 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
                 $databaseHeadersWithAttribute,
                 $newAttributeInFile
             );
+            //$csvImportService->getDataMappingRepository()->truncate();
 
             $dataRows = $dataAdjustmentResult['dataRows'];
             $corruptedData = $dataAdjustmentResult['corruptedData'];
-            //$csvImportService->getDataMappingRepository()->truncate();
             $this->io->progressStart(count($dataRows));
             $duplicate = 0;
             $importedDataCount = 0;
@@ -307,6 +326,10 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
      */
     protected function proceedWithExistingTable($dataArray, $databaseHeaders): array
     {
+       // $extraFieldsResult = $this->importService->detectNewFields($dataArray['headers'], $databaseHeaders);
+        //$this->fixExtraFields($extraFieldsResult, $dataArray['headers'], $databaseHeaders);
+
+        //dd('$extraFieldsResult:',$extraFieldsResult);
         $compareResult = $this->importService->compareNewDataToDatabase($dataArray['headers'], $databaseHeaders);
         $matchList = $compareResult['match'];
         $noMatchList = $compareResult['noMatch'];
@@ -403,7 +426,10 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
         }
         $this->io->info("Datensatz mit folgende Attribute wurde gefunden:");
         $this->io->text("Table:" . $dataArray['tableName']);
-        $this->printTable($dataArray['headers'], ['#', 'Name']);
+
+        $test = [['id'=>33], ['id'=>33]];
+        $this->printTable($test, ['Name'],['id']);
+        //$this->printTable($dataArray['headers'], ['Name'],[]);
         $answer = $this->io->ask('Möchten Sie weiter machen? [y/n]', 'y');
         if ($answer == 'n') {
             return Command::INVALID;
@@ -424,8 +450,8 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
         if ($isExistingTable) {
             $databaseHeaders = $this->repo->getExistingTableAttribute($tableName)['headers'];
             $databaseHeadersWithAttribute = $this->repo->getExistingTableAttribute($tableName)['headersWithAttribute'];
-            $this->io->info('Data Table [' . $tableName . ']' . '] mit folgende Attribute ist schon existiert:');
-            $this->printTable($databaseHeadersWithAttribute, ['#', 'Field', 'Type']);
+           // $this->io->info('Data Table [' . $tableName . ']' . '] mit folgende Attribute ist schon existiert:');
+            //$this->printTable($databaseHeadersWithAttribute, ['#', 'Field', 'Type']);
         }
         return [
             'isExistingTable' => $isExistingTable,
@@ -444,9 +470,11 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
     private function fixHeadersCompareError($dataHeaders, $noMatchList, $databaseHeaders)
     {
         $this->io->warning("Folgende Data Attribute passt nicht mit Datenbank Attribute:");
-        $this->io->table(['Datenbank', 'File'], $noMatchList);
-        $this->io->text('Passt nicht mit Datenbank Attribute:');
-        $this->printTable($databaseHeaders, ['#', 'Name']);
+        //dd($noMatchList);
+        //$this->io->table(['Datenbank', 'File'], $noMatchList);
+        //$this->io->text('Passt nicht mit Datenbank Attribute:');
+        $this->printTable($noMatchList, ['Error', 'Attribute'], ['error', 'name']);
+        dd('fixHeadersCompareError');
         $newAttribute = [];
         foreach ($noMatchList as $row) {
             $newAttribute = [];
@@ -497,30 +525,64 @@ class DataImportCommand extends \Symfony\Component\Console\Command\Command
 
     /**
      * prints a table in the Console
-     * @param $headers array table headers
+     * @param $data array table headers
      * @param $cols array data to be filled in table columns
      * @return void
      */
-    private function printTable($headers, $cols = [])
+    private function printTable($data, $cols = [], $attributes = [])
     {
+       // $cols = array_merge(['#'],$cols);
+       // dump($data);
+        $table = $this->io->createTable()->setHeaders($cols);
+        $table->addRows(array_column($data, $attributes[0]));
+        dd(array_column($data, $attributes[0]));
         $newArray = [];
-        foreach ($headers as $arrayKey => $array) {
-            if (is_array($array)) {
+        foreach ($data as $key => $value) {
+            if (is_array($value)) {
                 $colCounter = 0;
-                $rowCol = [$arrayKey];
-                foreach ($array as $row => $value) {
+                $rowCol = [$key];
+                foreach ($value as $key2 => $value2) {
                     if ($colCounter !== count($cols) - 1) {
-                        $rowCol [] = $value;
+                        $rowCol [] = $value2;
                         $colCounter++;
                     }
                 }
-                $newArray[$arrayKey] = $rowCol;
-            } else {
-                $newArray[$arrayKey] = [$arrayKey, $array];
+                $newArray[$key] = $rowCol;
+            } else
+            {
+                $newArray[$key] = [$key, trim($value)];
             }
         }
         $table = $this->io->createTable()->setHeaders($cols);
         $table->addRows($newArray);
         $table->render();
+    }
+
+    private function fixExtraFields(array $extraFieldsResult,mixed $headers, array $databaseHeaders)
+    {
+        $newAttribute = [];
+        if ($extraFieldsResult['db']['attribute']){
+            $this->io->warning("[Extra Attribute im Datenbank] Folgende Attribute fehlt im File:");
+            $this->printTable($extraFieldsResult['db']['attribute'], ['#', 'Name']);
+
+            foreach ($extraFieldsResult['db']['attribute'] as $att){
+                $message = 'Möchten Sie die neue Attribute[' . $att . '] zum File addieren? [y/n]';
+                $answer = $this->io->ask(
+                    $message,
+                    'y'
+                );
+                if ($answer !== 'y') {
+                    //remove field from file
+                }else{
+                    //$databaseHeaders = $this->importService->addNewFieldToDatabase($att, $databaseHeaders);
+                    $newAttribute [] = $att;
+                    $this->io->success('Neue Attribut [' . $att . '] wurde zum File hinzugefügt.');
+                }
+
+
+            }
+
+        }
+
     }
 }

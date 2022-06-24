@@ -36,12 +36,13 @@ abstract class ImportService
      * @param $databaseHeaders string[] database-headers
      * @return array[] compare result with 'match' and 'noMatch' attribute list from headers
      */
-    public function compareNewDataToDatabase($newAttribute, $databaseHeaders)
+    public function compareNewDataToDatabaseOri($newAttribute, $databaseHeaders)
     {
         $noMatchList = [];
         $matchList = [];
+        $copyNewAttribute = $newAttribute;
         $anzahlDatabaseHeaders = count($databaseHeaders);
-        $anzahlNewHeaders = count($newAttribute);
+        $anzahlNewHeaders = count( $copyNewAttribute);
 
         $anzahlLoop = count($databaseHeaders);
         $counter = max($anzahlNewHeaders, $anzahlDatabaseHeaders);
@@ -49,16 +50,117 @@ abstract class ImportService
         if ($anzahlNewHeaders < $anzahlDatabaseHeaders) {
             $anzahlLoop = $anzahlNewHeaders;
         }
-
         for ($i = 0; $i < $counter; $i++) {
+            //check if number of fileAttribute equals the number of dbAttribute
+            if ($anzahlDatabaseHeaders === $anzahlNewHeaders){
+                dump('header size doesnt match');
+            }
+
+            if ($i < $anzahlDatabaseHeaders){
+                //order match
+                if ($databaseHeaders[$i] === $newAttribute[$i]){
+                    dump('match: '.$i, $databaseHeaders[$i]);
+                    $matchList[] = ['db'=> ['key' => $i, 'name' => $databaseHeaders[$i]], 'file'=>['key' => $i, 'name' => $newAttribute[$i]] ];
+                }//order error
+                else{
+                    dump('NoMatch: '.$i, $databaseHeaders[$i]);
+                    $fileAttribute = array_search($databaseHeaders[$i],  $copyNewAttribute, true);
+                    dump('header: '.$databaseHeaders[$i]);
+                    if ($fileAttribute){
+                        // dump('inArray:', $fileAttribute, $copyNewAttribute[$fileAttribute]);
+                        $matchList[] = [ 'db'=>['key' => $i, 'name' => $databaseHeaders[$i]], 'file'=>['key' => $fileAttribute, 'name' => $newAttribute[$fileAttribute]] ];
+                    }
+                    // dd('stop', $matchList);
+                }
+            }else{
+
+            }
+
+        }
+/*
+        for ($i = 0; $i < $counter; $i++) {
+            //if dbAttribute header is empty
             if (empty($databaseHeaders[$i])) {
-                $noMatchList [] = array('[leer]', $newAttribute[$i]);
-            } elseif (empty($newAttribute[$i])) {
+                $noMatchList [] = array('[leer]',  $copyNewAttribute[$i]);
+            }//if fileAttribute header is empty
+            elseif (empty( $copyNewAttribute[$i])) {
                 $noMatchList [] = [$databaseHeaders[$i], '[leer]'];
-            } elseif ($databaseHeaders[$i] === $newAttribute[$i]) {
+            }
+            elseif ($databaseHeaders[$i] ===  $copyNewAttribute[$i]) {
                 $matchList [] = $databaseHeaders[$i];
             } else {
-                $noMatchList [] = [$databaseHeaders[$i], $newAttribute[$i]];
+                //reconstruct nomatchList
+                foreach ($noMatchList as $noMatchRow) {
+                    $databaseAttribute = $noMatchRow[0];
+                    dump($databaseAttribute);
+                    $fileAttribute = array_search($databaseAttribute,  $copyNewAttribute, true);
+                    if ($fileAttribute){
+                        dump('inArray:', $fileAttribute, $copyNewAttribute[$fileAttribute]);
+                    }
+                    dd('file:', $copyNewAttribute);
+                    dd($noMatchRow);
+                }
+
+                $noMatchList [] = [$databaseHeaders[$i],  $copyNewAttribute[$i]];
+            }
+        }
+*/
+
+
+        dump('match:',$matchList);
+       // dump('noMatch:',$noMatchList);
+       // dd('nomatch ');
+        return ['match' => $matchList, 'noMatch' => $noMatchList];
+    }
+
+    public function detectNewFields($newAttribute, $databaseHeaders){
+        $fileDiff = [ 'location' => 'file', 'attribute' => array_diff($newAttribute, $databaseHeaders)];
+        $dbDiff = [ 'location' => 'db', 'attribute' => array_diff($databaseHeaders, $newAttribute)];
+        return ['file'=>$fileDiff, 'db'=>$dbDiff];
+    }
+    public function compareNewDataToDatabase($newAttribute, $databaseHeaders)
+    {
+        $noMatchList = [];
+        $matchList = [];
+        $copyNewAttribute = $newAttribute;
+        $anzahlDatabaseHeaders = count($databaseHeaders);
+        $anzahlNewHeaders = count( $copyNewAttribute);
+
+        //identify db and file headers
+        $maxCounter = max($anzahlNewHeaders, $anzahlDatabaseHeaders);
+
+        foreach ($databaseHeaders as $dKey => $dValue) {
+            $fileAttribute = array_search($dValue, $copyNewAttribute, true);
+            //validate attribute
+            //order match
+          if ($fileAttribute !== false) {
+              if ($fileAttribute === 0 && $copyNewAttribute[$fileAttribute] === $dValue){
+                  $matchList[] = ['db'=> ['key' => $dKey, 'name' => $dValue], 'file'=>['key' => $fileAttribute, 'name' => $copyNewAttribute[$fileAttribute]] ];
+              }else{
+                  $noMatchList[] = [
+                      'error' => 'order_error',
+                      'db' => ['key' => $dKey, 'name' => $dValue],
+                      'file' => ['key' => $fileAttribute, 'name' => $copyNewAttribute[$fileAttribute]]
+                  ];
+              }
+            }else{
+              $noMatchList[] = [
+                  'error'=>'extra_field_in_datenbank',
+                  'db'=> ['key' => $dKey, 'name' => $dValue],
+                  'file'=>['key' => null, 'name' => null]
+              ];
+            }
+            unset($databaseHeaders[$dKey]);
+            unset($copyNewAttribute[$fileAttribute]);
+        }
+        if ($copyNewAttribute){
+            foreach ($copyNewAttribute as $key => $value){
+                $noMatchList[] = [
+                    'error'=>'extra_field_in_file',
+                    'db'=> ['key' => null, 'name' => null],
+                    'file'=>['key' => $key, 'name' => $value]
+                ];
+                unset($copyNewAttribute[$key]);
             }
         }
         return ['match' => $matchList, 'noMatch' => $noMatchList];

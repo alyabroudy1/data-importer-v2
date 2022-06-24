@@ -54,7 +54,8 @@ class CSVImportService extends ImportService
 
         foreach ($this->fileObject as $i => $row) {
             if ($i == 0) {
-                $headers = $row;
+                $headers = array_map('trim', $row);
+                //$headers = $row;
             } elseif ($i == 1) {
                 $firstRowData = $row;
                 break;
